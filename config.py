@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 CONFIG_FILE = Path(__file__).resolve().parent / "config.json"
@@ -46,5 +47,19 @@ def load_config():
     if config["mode"] == "api":
         if not all(config[field] for field in ("api_key", "base_url", "model")):
             raise ValueError("API 模式需要填写 api_key、base_url 和 model。")
+        address = urlparse(config["base_url"])
+        if (
+            address.scheme != "https"
+            or not address.hostname
+            or address.username
+            or address.password
+            or address.query
+            or address.fragment
+        ):
+            raise ValueError("base_url 必须是 HTTPS 基础地址，不能包含账号、查询参数或片段。")
+        if address.path.rstrip("/").endswith("/chat/completions"):
+            raise ValueError("base_url 请填写基础地址，不要包含 /chat/completions。")
+        if any(character.isspace() for character in config["api_key"]):
+            raise ValueError("api_key 不能包含空白字符。")
 
     return config

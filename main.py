@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from ai_client import get_reply
+from ai_client import APIError, stream_reply
 from config import load_config
 
 
@@ -70,10 +70,6 @@ def main():
         print(f"配置错误：{error}")
         return
 
-    if config["mode"] == "api":
-        print("真实 API 调用尚未实现，请将 mode 设置为 mock。")
-        return
-
     messages = load_messages()
     if messages is None:
         return
@@ -82,7 +78,10 @@ def main():
         show_messages(messages)
 
     print("输入问题后按回车；输入“退出”结束程序。")
-    print("当前使用模拟 AI，不发送网络请求。")
+    if config["mode"] == "mock":
+        print("当前使用模拟 AI，不发送网络请求。")
+    else:
+        print("当前使用真实 API，聊天历史会发送到你配置的服务商。")
 
     while True:
         question = input("\n请输入你的问题：").strip()
@@ -99,10 +98,21 @@ def main():
         messages.append({"role": "user", "content": question})
         save_messages(messages)
 
-        reply = get_reply(messages)
+        pieces = []
+        print("AI：", end="", flush=True)
+        try:
+            for piece in stream_reply(messages, config):
+                print(piece, end="", flush=True)
+                pieces.append(piece)
+        except APIError as error:
+            print(f"\nAI 请求失败：{error}")
+            if pieces:
+                print("上面的回答不完整，未保存为 AI 消息；你的问题已保留。")
+            continue
+        reply = "".join(pieces)
+        print()
         messages.append({"role": "assistant", "content": reply})
         save_messages(messages)
-        print(f"AI：{reply}")
 
 
 if __name__ == "__main__":
