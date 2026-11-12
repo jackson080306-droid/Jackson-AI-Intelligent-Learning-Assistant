@@ -33,6 +33,10 @@ class ChatApp:
         self.session_list = tk.Listbox(sidebar, width=22, exportselection=False)
         self.session_list.pack(fill="both", expand=True)
         self.session_list.bind("<<ListboxSelect>>", self.switch_session)
+        self.rename_button = ttk.Button(sidebar, text="重命名", command=self.rename_session)
+        self.rename_button.pack(fill="x", pady=(8, 0))
+        self.delete_button = ttk.Button(sidebar, text="删除会话", command=self.delete_session)
+        self.delete_button.pack(fill="x", pady=(8, 0))
         content = ttk.Frame(root)
         content.pack(side="right", fill="both", expand=True)
         self.chat = scrolledtext.ScrolledText(content, wrap="word", state="disabled")
@@ -114,6 +118,39 @@ class ChatApp:
         self.manager.select_session(identifier)
         self.activate_session()
 
+    def rename_session(self):
+        """修改当前名称，保留正在编辑的草稿。"""
+        if self.busy:
+            return
+        name = simpledialog.askstring(
+            "重命名", "请输入新名称：",
+            initialvalue=self.manager.current_session()["name"], parent=self.root
+        )
+        if name is None:
+            return
+        try:
+            self.manager.rename_current(name)
+        except ValueError as error:
+            messagebox.showwarning("名称无效", str(error))
+            return
+        self.refresh_sessions()
+        self.root.title(f"AI 智能学习助手 - {self.manager.current_session()['name']}")
+        self.save()
+
+    def delete_session(self):
+        """确认后删除当前会话及其草稿。"""
+        if self.busy:
+            return
+        session = self.manager.current_session()
+        if not messagebox.askyesno(
+            "删除会话", f"确定删除“{session['name']}”及其全部消息吗？此操作无法撤销。",
+            parent=self.root
+        ):
+            return
+        self.drafts.pop(session["id"], None)
+        self.manager.delete_current()
+        self.activate_session()
+
     def append_text(self, text):
         """只在主线程中更新聊天区域。"""
         self.chat.configure(state="normal")
@@ -144,6 +181,8 @@ class ChatApp:
         self.busy = True
         self.send_button.configure(state="disabled")
         self.new_button.configure(state="disabled")
+        self.rename_button.configure(state="disabled")
+        self.delete_button.configure(state="disabled")
         self.session_list.configure(state="disabled")
         self.status.set("正在接收回答，可以继续编辑下一个问题")
         snapshot = [message.copy() for message in self.messages]
@@ -183,6 +222,8 @@ class ChatApp:
             self.busy = False
             self.send_button.configure(state="normal")
             self.new_button.configure(state="normal")
+            self.rename_button.configure(state="normal")
+            self.delete_button.configure(state="normal")
             self.session_list.configure(state="normal")
         self.root.after(100, self.poll_events)
 
