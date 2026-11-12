@@ -31,6 +31,7 @@ class SessionManager:
             with self.path.open("r", encoding="utf-8") as file:
                 self.data = json.load(file)
             self.validate()
+            self.data.setdefault("favorites", [])
         else:
             messages = []
             legacy_path = Path(legacy_path)
@@ -67,6 +68,19 @@ class SessionManager:
             validate_messages(session.get("messages"))
         if self.data.get("current_session_id") not in identifiers:
             raise ValueError("当前会话不存在。")
+        favorites = self.data.get("favorites", [])
+        if not isinstance(favorites, list):
+            raise ValueError("收藏夹格式不正确。")
+        favorite_ids = set()
+        for item in favorites:
+            if not isinstance(item, dict):
+                raise ValueError("收藏格式不正确。")
+            for field in ("id", "source_name", "question", "answer"):
+                if not isinstance(item.get(field), str):
+                    raise ValueError("收藏字段格式不正确。")
+            if not item["id"] or item["id"] in favorite_ids:
+                raise ValueError("收藏 ID 无效。")
+            favorite_ids.add(item["id"])
 
     def current_session(self):
         """取得当前会话，调用方可修改其中的消息列表。"""
@@ -97,6 +111,33 @@ class SessionManager:
         if not any(item["id"] == session_id for item in self.data["sessions"]):
             raise ValueError("会话不存在。")
         self.data["current_session_id"] = session_id
+
+    def answered_pairs(self):
+        """只返回紧邻用户问题的完整回答，跳过失败后未回答的问题。"""
+        messages = self.current_session()["messages"]
+        return [
+            (messages[index - 1]["content"], message["content"])
+            for index, message in enumerate(messages)
+            if index > 0 and message["role"] == "assistant"
+            and messages[index - 1]["role"] == "user"
+        ]
+
+    def add_favorite(self, question, answer):
+        """保存问答副本；相同内容不重复收藏。"""
+        favorites = self.data.setdefault("favorites", [])
+        if any(item["question"] == question and item["answer"] == answer for item in favorites):
+            return False
+        favorites.append({
+            "id": uuid4().hex, "source_name": self.current_session()["name"],
+            "question": question, "answer": answer,
+        })
+        return True
+
+    def remove_favorite(self, identifier):
+        """移除指定收藏，不影响原会话消息。"""
+        self.data["favorites"] = [
+            item for item in self.data.get("favorites", []) if item["id"] != identifier
+        ]
 
     def rename_current(self, name):
         """修改名称，保留会话 ID 和消息。"""
