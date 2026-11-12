@@ -12,7 +12,7 @@ from exporter import export_session
 from prompt_templates import TEMPLATES, build_prompt
 from session_manager import DATA_FILE, LEGACY_FILE
 from config import CONFIG_FILE
-from session_manager import SessionManager
+from session_manager import SessionManager, TOPICS
 
 
 class ChatApp:
@@ -48,6 +48,16 @@ class ChatApp:
         ttk.Button(sidebar, text="查看收藏夹", command=self.show_favorites).pack(fill="x", pady=(8, 0))
         content = ttk.Frame(root)
         content.pack(side="right", fill="both", expand=True)
+        topic_bar = ttk.Frame(content)
+        topic_bar.pack(fill="x", padx=12, pady=(12, 0))
+        ttk.Label(topic_bar, text="会话主题：").pack(side="left")
+        self.topic = tk.StringVar(value=manager.current_session().get("topic", "未分类"))
+        self.topic_box = ttk.Combobox(
+            topic_bar, textvariable=self.topic, values=TOPICS, state="readonly", width=14
+        )
+        self.topic_box.pack(side="left", padx=4)
+        self.topic_box.bind("<<ComboboxSelected>>", self.change_topic)
+        ttk.Button(topic_bar, text="主题统计", command=self.show_statistics).pack(side="right")
         self.chat = scrolledtext.ScrolledText(content, wrap="word", state="disabled")
         self.chat.pack(fill="both", expand=True, padx=12, pady=12)
 
@@ -76,6 +86,29 @@ class ChatApp:
         self.render_session()
         root.protocol("WM_DELETE_WINDOW", self.close)
         root.after(100, self.poll_events)
+
+    def change_topic(self, event=None):
+        """修改会话归类并保存，不调用模型。"""
+        self.manager.set_current_topic(self.topic.get())
+        self.save()
+        self.status.set("会话主题已更新，历史问题也归入此主题")
+
+    def show_statistics(self):
+        """显示现存会话的主题提问数量。"""
+        counts = self.manager.topic_statistics()
+        window = tk.Toplevel(self.root)
+        window.title("主题提问统计")
+        window.geometry("380x330")
+        table = ttk.Treeview(window, columns=("topic", "count"), show="headings", height=7)
+        table.heading("topic", text="学习主题")
+        table.heading("count", text="提问数量")
+        table.column("topic", width=180)
+        table.column("count", width=120, anchor="center")
+        table.pack(fill="both", expand=True, padx=12, pady=12)
+        for topic, count in counts.items():
+            table.insert("", "end", values=(topic, count))
+        ttk.Label(window, text=f"共 {sum(counts.values())} 次提问（含请求失败的问题）").pack()
+        ttk.Label(window, text="统计现存会话；删除会话后数量减少。", wraplength=350).pack(pady=8)
 
     def choose_favorite(self):
         """从当前会话选择已完成的问答。"""
@@ -188,6 +221,7 @@ class ChatApp:
     def activate_session(self):
         """切换数据引用，恢复各会话独立的输入草稿。"""
         self.messages = self.manager.current_session()["messages"]
+        self.topic.set(self.manager.current_session().get("topic", "未分类"))
         self.input.delete("1.0", "end")
         self.input.insert("1.0", self.drafts.get(self.manager.data["current_session_id"], ""))
         self.refresh_sessions()
