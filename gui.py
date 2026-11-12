@@ -3,10 +3,14 @@
 import queue
 import threading
 import tkinter as tk
-from tkinter import messagebox, scrolledtext, simpledialog, ttk
+from tkinter import filedialog, messagebox, scrolledtext, simpledialog, ttk
+from pathlib import Path
 
 from ai_client import APIError, stream_reply
 from config import load_config
+from exporter import export_session
+from session_manager import DATA_FILE, LEGACY_FILE
+from config import CONFIG_FILE
 from session_manager import SessionManager
 
 
@@ -37,6 +41,8 @@ class ChatApp:
         self.rename_button.pack(fill="x", pady=(8, 0))
         self.delete_button = ttk.Button(sidebar, text="删除会话", command=self.delete_session)
         self.delete_button.pack(fill="x", pady=(8, 0))
+        self.export_button = ttk.Button(sidebar, text="导出会话", command=self.export_current)
+        self.export_button.pack(fill="x", pady=(8, 0))
         content = ttk.Frame(root)
         content.pack(side="right", fill="both", expand=True)
         self.chat = scrolledtext.ScrolledText(content, wrap="word", state="disabled")
@@ -151,6 +157,34 @@ class ChatApp:
         self.manager.delete_current()
         self.activate_session()
 
+    def export_current(self):
+        """选择导出位置，避免覆盖程序和内部数据文件。"""
+        if self.busy:
+            return
+        session = self.manager.current_session()
+        if not session["messages"]:
+            messagebox.showinfo("没有记录", "当前会话还没有消息。", parent=self.root)
+            return
+        filename = filedialog.asksaveasfilename(
+            parent=self.root, title="导出当前会话", initialfile="聊天记录.txt",
+            defaultextension=".txt",
+            filetypes=[("文本文件", "*.txt"), ("Markdown 文件", "*.md")]
+        )
+        if not filename:
+            return
+        path = Path(filename).resolve()
+        protected = {Path(item).resolve() for item in (DATA_FILE, LEGACY_FILE, CONFIG_FILE, self.manager.path)}
+        project = Path(__file__).resolve().parent
+        if path in protected or (path.parent == project and path.exists()):
+            messagebox.showwarning("无法导出", "请选择新文件，避免覆盖项目文件。", parent=self.root)
+            return
+        try:
+            export_session(session, path)
+        except (OSError, ValueError) as error:
+            messagebox.showerror("导出失败", str(error), parent=self.root)
+            return
+        self.status.set(f"已导出：{path.name}")
+
     def append_text(self, text):
         """只在主线程中更新聊天区域。"""
         self.chat.configure(state="normal")
@@ -183,6 +217,7 @@ class ChatApp:
         self.new_button.configure(state="disabled")
         self.rename_button.configure(state="disabled")
         self.delete_button.configure(state="disabled")
+        self.export_button.configure(state="disabled")
         self.session_list.configure(state="disabled")
         self.status.set("正在接收回答，可以继续编辑下一个问题")
         snapshot = [message.copy() for message in self.messages]
@@ -224,6 +259,7 @@ class ChatApp:
             self.new_button.configure(state="normal")
             self.rename_button.configure(state="normal")
             self.delete_button.configure(state="normal")
+            self.export_button.configure(state="normal")
             self.session_list.configure(state="normal")
         self.root.after(100, self.poll_events)
 
