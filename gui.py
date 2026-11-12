@@ -13,6 +13,7 @@ from exporter import export_session
 from prompt_templates import TEMPLATES, build_prompt
 from session_manager import DATA_FILE, LEGACY_FILE
 from config import CONFIG_FILE
+from settings_dialog import open_settings
 from session_manager import SessionManager, TOPICS
 
 
@@ -36,6 +37,8 @@ class ChatApp:
         root.minsize(500, 350)
         sidebar = ttk.Frame(root, padding=8)
         sidebar.pack(side="left", fill="y")
+        self.settings_button = ttk.Button(sidebar, text="API 配置", command=self.edit_settings)
+        self.settings_button.pack(fill="x", pady=(0, 8))
         self.new_button = ttk.Button(sidebar, text="新建会话", command=self.new_session)
         self.new_button.pack(fill="x", pady=(0, 8))
         self.session_list = tk.Listbox(sidebar, width=22, exportselection=False)
@@ -90,6 +93,18 @@ class ChatApp:
         root.protocol("WM_DELETE_WINDOW", self.close)
         root.after(100, self.poll_events)
         root.after(60000, self.checkpoint_usage)
+
+    def edit_settings(self):
+        """空闲时编辑配置，下一次提问使用新设置。"""
+        if self.busy:
+            return
+
+        def apply(config):
+            self.config = config
+            self.status.set("配置已保存，下次提问生效")
+            self.append_text(f"\n[已切换为{'真实 API' if config['mode'] == 'api' else '模拟'}模式]\n")
+
+        open_settings(self.root, self.config, apply)
 
     def usage_seconds(self):
         """使用单调时钟计算累计窗口打开时长，避免修改系统时间造成跳变。"""
@@ -383,6 +398,7 @@ class ChatApp:
         self.busy = True
         self.send_button.configure(state="disabled")
         self.new_button.configure(state="disabled")
+        self.settings_button.configure(state="disabled")
         self.rename_button.configure(state="disabled")
         self.delete_button.configure(state="disabled")
         self.export_button.configure(state="disabled")
@@ -425,6 +441,7 @@ class ChatApp:
             self.busy = False
             self.send_button.configure(state="normal")
             self.new_button.configure(state="normal")
+            self.settings_button.configure(state="normal")
             self.rename_button.configure(state="normal")
             self.delete_button.configure(state="normal")
             self.export_button.configure(state="normal")
