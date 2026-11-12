@@ -44,6 +44,8 @@ class ChatApp:
         self.delete_button.pack(fill="x", pady=(8, 0))
         self.export_button = ttk.Button(sidebar, text="导出会话", command=self.export_current)
         self.export_button.pack(fill="x", pady=(8, 0))
+        ttk.Button(sidebar, text="收藏问答", command=self.choose_favorite).pack(fill="x", pady=(8, 0))
+        ttk.Button(sidebar, text="查看收藏夹", command=self.show_favorites).pack(fill="x", pady=(8, 0))
         content = ttk.Frame(root)
         content.pack(side="right", fill="both", expand=True)
         self.chat = scrolledtext.ScrolledText(content, wrap="word", state="disabled")
@@ -74,6 +76,76 @@ class ChatApp:
         self.render_session()
         root.protocol("WM_DELETE_WINDOW", self.close)
         root.after(100, self.poll_events)
+
+    def choose_favorite(self):
+        """从当前会话选择已完成的问答。"""
+        if self.busy:
+            self.status.set("请等待回答完成后再收藏")
+            return
+        pairs = self.manager.answered_pairs()
+        if not pairs:
+            messagebox.showinfo("没有问答", "当前会话还没有完整问答。", parent=self.root)
+            return
+        self.open_collection(pairs, False)
+
+    def show_favorites(self):
+        """显示收藏副本，支持移除。"""
+        self.open_collection(list(self.manager.data.get("favorites", [])), True)
+
+    def open_collection(self, items, browsing):
+        """以列表和预览窗口展示问答；弹窗期间阻止切换原会话。"""
+        window = tk.Toplevel(self.root)
+        window.title("收藏夹" if browsing else "选择要收藏的问答")
+        window.geometry("650x500")
+        window.transient(self.root)
+        window.grab_set()
+        listing = tk.Listbox(window, height=7, exportselection=False)
+        listing.pack(fill="x", padx=10, pady=10)
+        preview = scrolledtext.ScrolledText(window, wrap="word", state="disabled")
+        preview.pack(fill="both", expand=True, padx=10)
+
+        def refresh():
+            listing.delete(0, "end")
+            for item in items:
+                question = item["question"] if browsing else item[0]
+                listing.insert("end", question.replace("\n", " ")[:70])
+            preview.configure(state="normal")
+            preview.delete("1.0", "end")
+            preview.configure(state="disabled")
+
+        def select(event=None):
+            selection = listing.curselection()
+            if not selection:
+                return
+            item = items[selection[0]]
+            question, answer = (item["question"], item["answer"]) if browsing else item
+            source = f"收藏时的会话：{item['source_name']}\n\n" if browsing else ""
+            preview.configure(state="normal")
+            preview.delete("1.0", "end")
+            preview.insert("end", f"{source}你：{question}\n\nAI：{answer}")
+            preview.configure(state="disabled")
+
+        def action():
+            selection = listing.curselection()
+            if not selection:
+                return
+            index = selection[0]
+            if browsing:
+                if not messagebox.askyesno("移除收藏", "确定移除此条收藏吗？原会话不受影响。", parent=window):
+                    return
+                self.manager.remove_favorite(items[index]["id"])
+                items.pop(index)
+                refresh()
+            else:
+                if not self.manager.add_favorite(*items[index]):
+                    messagebox.showinfo("已收藏", "该问答已经在收藏夹中。", parent=window)
+                    return
+            self.save()
+            self.status.set("收藏夹已更新")
+
+        listing.bind("<<ListboxSelect>>", select)
+        ttk.Button(window, text="移除选中收藏" if browsing else "收藏选中问答", command=action).pack(pady=10)
+        refresh()
 
     def apply_template(self):
         """包装输入内容，留给用户审阅后手动发送。"""
