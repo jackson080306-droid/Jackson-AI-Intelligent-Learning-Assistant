@@ -27,6 +27,11 @@ def load_config():
     except (OSError, ValueError) as error:
         raise ValueError("无法读取 config.json，请检查文件和 JSON 格式。") from error
 
+    return validate_config(settings)
+
+
+def validate_config(settings):
+    """校验并返回配置副本，供文件读取和配置窗口共用。"""
     if not isinstance(settings, dict):
         raise ValueError("配置内容必须是一个 JSON 对象。")
 
@@ -62,4 +67,14 @@ def load_config():
         if any(character.isspace() for character in config["api_key"]):
             raise ValueError("api_key 不能包含空白字符。")
 
+    return config
+
+
+def save_config(settings):
+    """先校验再写入本地配置，成功后返回规范化配置。"""
+    config = validate_config(settings)
+    temporary = CONFIG_FILE.with_suffix(".tmp")
+    with temporary.open("w", encoding="utf-8") as file:
+        json.dump(config, file, ensure_ascii=False, indent=2)
+    temporary.replace(CONFIG_FILE)
     return config
