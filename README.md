@@ -94,3 +94,12 @@ python gui.py
 
 真实密钥只放在本地 `config.json` 中，不要写入示例文件或代码。
 `.gitignore` 已排除本地配置、聊天记录和 Python 缓存。
+
+## 自动化测试
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+测试使用临时文件和模拟网络，不读取真实密钥或聊天记录。
+当前 15 个测试方法通过。覆盖范围、结果边界和人工检查项见 [TESTING.md](TESTING.md)。
