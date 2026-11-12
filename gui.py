@@ -2,6 +2,7 @@
 
 import queue
 import threading
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, simpledialog, ttk
 from pathlib import Path
@@ -22,6 +23,8 @@ class ChatApp:
         self.root = root
         self.config = config
         self.manager = manager
+        self.usage_started = time.monotonic()
+        self.previous_usage = manager.data.get("usage_seconds", 0)
         self.messages = manager.current_session()["messages"]
         self.drafts = {}
         self.events = queue.Queue()
@@ -86,6 +89,16 @@ class ChatApp:
         self.render_session()
         root.protocol("WM_DELETE_WINDOW", self.close)
         root.after(100, self.poll_events)
+        root.after(60000, self.checkpoint_usage)
+
+    def usage_seconds(self):
+        """使用单调时钟计算累计窗口打开时长，避免修改系统时间造成跳变。"""
+        return self.previous_usage + time.monotonic() - self.usage_started
+
+    def checkpoint_usage(self):
+        """每分钟保存一次，异常退出最多损失最近一次保存后的时长。"""
+        self.save()
+        self.root.after(60000, self.checkpoint_usage)
 
     def change_topic(self, event=None):
         """修改会话归类并保存，不调用模型。"""
@@ -98,7 +111,8 @@ class ChatApp:
         counts = self.manager.topic_statistics()
         window = tk.Toplevel(self.root)
         window.title("主题提问统计")
-        window.geometry("380x330")
+        window.geometry("620x650")
+        window.minsize(460, 560)
         table = ttk.Treeview(window, columns=("topic", "count"), show="headings", height=7)
         table.heading("topic", text="学习主题")
         table.heading("count", text="提问数量")
@@ -109,6 +123,26 @@ class ChatApp:
             table.insert("", "end", values=(topic, count))
         ttk.Label(window, text=f"共 {sum(counts.values())} 次提问（含请求失败的问题）").pack()
         ttk.Label(window, text="统计现存会话；删除会话后数量减少。", wraplength=350).pack(pady=8)
+        seconds = int(self.usage_seconds())
+        ttk.Label(window, text=f"累计窗口使用时长：{seconds // 3600} 小时 {(seconds % 3600) // 60} 分 {seconds % 60} 秒").pack()
+        ttk.Label(window, text="包含等待和空闲时间；本页为打开时的统计快照。", wraplength=440).pack(pady=4)
+        chart = tk.Canvas(window, background="white", height=230, highlightthickness=0)
+        chart.pack(fill="both", expand=True, padx=12, pady=12)
+
+        def draw(event=None):
+            chart.delete("all")
+            width = max(chart.winfo_width(), 300)
+            maximum = max(counts.values(), default=0)
+            chart.create_text(12, 15, text="各主题提问数量", anchor="w")
+            for index, (topic, count) in enumerate(counts.items()):
+                top = 38 + index * 28
+                length = (width - 150) * count / max(maximum, 1)
+                chart.create_text(8, top + 8, text=topic, anchor="w")
+                if count:
+                    chart.create_rectangle(90, top, 90 + length, top + 16, fill="#3875cb", outline="")
+                chart.create_text(98 + length, top + 8, text=str(count), anchor="w")
+
+        chart.bind("<Configure>", draw)
 
     def choose_favorite(self):
         """从当前会话选择已完成的问答。"""
@@ -328,6 +362,7 @@ class ChatApp:
     def save(self):
         """保存失败时在窗口中明确提醒用户。"""
         try:
+            self.manager.data["usage_seconds"] = self.usage_seconds()
             self.manager.save()
         except (OSError, ValueError):
             messagebox.showwarning("保存失败", "记录未能保存，请检查目录权限和磁盘空间。")
