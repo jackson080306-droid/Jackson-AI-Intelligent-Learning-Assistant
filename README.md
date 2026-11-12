@@ -44,9 +44,14 @@ python gui.py
 
 ## 文件说明
 
+窗口左侧的“导出会话”可将当前会话保存为 UTF-8 的 TXT 或 Markdown 文件。
+仅导出会话名称和已保存的消息，不包含配置或草稿；生成期间禁止导出。
+建议导出到项目外，或放在已忽略的 `exports/` 文件夹，避免将私人对话提交到仓库。
+
 - `main.py`：程序入口、聊天记录读写和控制台交互。
 - `gui.py`：tkinter 桌面窗口、后台线程和队列更新。
 - `session_manager.py`：多会话数据管理、校验和旧历史迁移。
+- `exporter.py`：将当前会话导出为 TXT 或 Markdown。
 - `ai_client.py`：模拟回答和真实 API 请求。
 - `config.py`：配置读取和校验。
 - `config.example.json`：不包含真实密钥的配置示例。
