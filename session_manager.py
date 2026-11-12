@@ -97,3 +97,22 @@ class SessionManager:
         if not any(item["id"] == session_id for item in self.data["sessions"]):
             raise ValueError("会话不存在。")
         self.data["current_session_id"] = session_id
+
+    def rename_current(self, name):
+        """修改名称，保留会话 ID 和消息。"""
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("会话名称不能为空。")
+        self.current_session()["name"] = name.strip()
+
+    def delete_current(self):
+        """删除当前会话，选中相邻会话；最后一个删除后建立默认会话。"""
+        sessions = self.data["sessions"]
+        index = next(
+            index for index, session in enumerate(sessions)
+            if session["id"] == self.data["current_session_id"]
+        )
+        sessions.pop(index)
+        if sessions:
+            self.data["current_session_id"] = sessions[min(index, len(sessions) - 1)]["id"]
+        else:
+            self.create_session("默认会话")
