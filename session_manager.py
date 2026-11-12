@@ -7,6 +7,7 @@ from uuid import uuid4
 
 DATA_FILE = Path(__file__).resolve().parent / "sessions.json"
 LEGACY_FILE = Path(__file__).resolve().parent / "chat_history.json"
+TOPICS = ("未分类", "Python", "数学", "英语", "计算机基础", "其他")
 
 
 def validate_messages(messages):
@@ -65,6 +66,8 @@ class SessionManager:
             if not isinstance(name, str) or not name.strip():
                 raise ValueError("会话名称不能为空。")
             identifiers.add(identifier)
+            if session.get("topic", "未分类") not in TOPICS:
+                raise ValueError("会话主题不正确。")
             validate_messages(session.get("messages"))
         if self.data.get("current_session_id") not in identifiers:
             raise ValueError("当前会话不存在。")
@@ -81,6 +84,21 @@ class SessionManager:
             if not item["id"] or item["id"] in favorite_ids:
                 raise ValueError("收藏 ID 无效。")
             favorite_ids.add(item["id"])
+
+    def set_current_topic(self, topic):
+        """设置会话主题；该会话所有问题按同一主题统计。"""
+        if topic not in TOPICS:
+            raise ValueError("请选择有效主题。")
+        self.current_session()["topic"] = topic
+
+    def topic_statistics(self):
+        """按现存会话统计提问条数，旧会话默认为未分类。"""
+        counts = {topic: 0 for topic in TOPICS}
+        for session in self.data["sessions"]:
+            counts[session.get("topic", "未分类")] += sum(
+                message["role"] == "user" for message in session["messages"]
+            )
+        return counts
 
     def current_session(self):
         """取得当前会话，调用方可修改其中的消息列表。"""
