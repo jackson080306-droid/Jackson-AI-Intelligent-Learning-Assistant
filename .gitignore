@@ -3,6 +3,7 @@ chat_history.json
 chat_history.tmp
 sessions.json
 sessions.tmp
+exports/
 config.json
 .env
 .venv/
