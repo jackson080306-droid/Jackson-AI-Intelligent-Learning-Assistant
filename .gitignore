@@ -1,4 +1,5 @@
 __pycache__/
+.test-*/
 chat_history.json
 chat_history.tmp
 sessions.json
