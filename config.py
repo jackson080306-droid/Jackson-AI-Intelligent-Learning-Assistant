@@ -18,8 +18,14 @@ DEFAULT_CONFIG = {
 
 def load_config():
     """读取并检查配置；文件不存在时使用默认模拟模式。"""
+    collection = load_profiles()
+    return collection["profiles"][collection["active_profile"]].copy()
+
+
+def load_profiles():
+    """读取配置集合，旧版单套配置只在内存中转换。"""
     if not CONFIG_FILE.exists():
-        return DEFAULT_CONFIG.copy()
+        return {"active_profile": "默认配置", "profiles": {"默认配置": DEFAULT_CONFIG.copy()}}
 
     try:
         with CONFIG_FILE.open("r", encoding="utf-8") as file:
@@ -27,7 +33,27 @@ def load_config():
     except (OSError, ValueError) as error:
         raise ValueError("无法读取 config.json，请检查文件和 JSON 格式。") from error
 
-    return validate_config(settings)
+    if isinstance(settings, dict) and "profiles" not in settings:
+        settings = {"active_profile": "默认配置", "profiles": {"默认配置": settings}}
+    return validate_profiles(settings)
+
+
+def validate_profiles(settings):
+    """检查配置名称、当前选择以及每套接口参数。"""
+    if not isinstance(settings, dict) or not isinstance(settings.get("profiles"), dict):
+        raise ValueError("配置集合必须包含 profiles 对象。")
+    profiles = settings["profiles"]
+    if not profiles:
+        raise ValueError("至少需要保留一套配置。")
+    for name in profiles:
+        if not isinstance(name, str) or not name.strip() or name != name.strip():
+            raise ValueError("配置名称不能为空，且首尾不能有空格。")
+    active = settings.get("active_profile")
+    if not isinstance(active, str) or active not in profiles:
+        raise ValueError("当前配置名称不存在。")
+    return {"active_profile": active, "profiles": {
+        name: validate_config(config) for name, config in profiles.items()
+    }}
 
 
 def validate_config(settings):
@@ -73,8 +99,17 @@ def validate_config(settings):
 def save_config(settings):
     """先校验再写入本地配置，成功后返回规范化配置。"""
     config = validate_config(settings)
+    collection = load_profiles()
+    collection["profiles"][collection["active_profile"]] = config
+    save_profiles(collection)
+    return config
+
+
+def save_profiles(settings):
+    """原子替换整个配置集合；失败时不应用到主窗口。"""
+    collection = validate_profiles(settings)
     temporary = CONFIG_FILE.with_suffix(".tmp")
     with temporary.open("w", encoding="utf-8") as file:
-        json.dump(config, file, ensure_ascii=False, indent=2)
+        json.dump(collection, file, ensure_ascii=False, indent=2)
     temporary.replace(CONFIG_FILE)
-    return config
+    return collection
