@@ -74,6 +74,10 @@ python gui.py
 
 ## 本地配置
 
+窗口左侧“API 配置”支持编辑并保存单套配置，保存后下一次提问生效。
+密钥默认遮挡，可以选择显示；遮挡不等于加密，配置在本地以明文保存。
+生成期间不能修改配置；多套配置切换将在后续增加。
+
 复制 `config.example.json` 并将副本命名为 `config.json`。
 模拟模式将 `mode` 设为 `mock`。真实模式设为 `api`，并填写服务商的
 `api_key`、`base_url` 和 `model`。`base_url` 使用 HTTPS 基础地址，
