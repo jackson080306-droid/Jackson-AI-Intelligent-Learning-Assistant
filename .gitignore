@@ -1,6 +1,8 @@
 __pycache__/
 chat_history.json
 chat_history.tmp
+sessions.json
+sessions.tmp
 config.json
 .env
 .venv/
