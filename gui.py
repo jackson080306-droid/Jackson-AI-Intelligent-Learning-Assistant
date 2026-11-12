@@ -9,6 +9,7 @@ from pathlib import Path
 from ai_client import APIError, stream_reply
 from config import load_config
 from exporter import export_session
+from prompt_templates import TEMPLATES, build_prompt
 from session_manager import DATA_FILE, LEGACY_FILE
 from config import CONFIG_FILE
 from session_manager import SessionManager
@@ -48,6 +49,16 @@ class ChatApp:
         self.chat = scrolledtext.ScrolledText(content, wrap="word", state="disabled")
         self.chat.pack(fill="both", expand=True, padx=12, pady=12)
 
+        template_bar = ttk.Frame(content)
+        template_bar.pack(fill="x", padx=12, pady=(0, 8))
+        ttk.Label(template_bar, text="学习模板：").pack(side="left")
+        self.template_name = tk.StringVar(value=next(iter(TEMPLATES)))
+        ttk.Combobox(
+            template_bar, textvariable=self.template_name, values=list(TEMPLATES),
+            state="readonly", width=14
+        ).pack(side="left", padx=4)
+        ttk.Button(template_bar, text="应用到输入框", command=self.apply_template).pack(side="left")
+
         self.input = tk.Text(content, height=4, wrap="word")
         self.input.pack(fill="x", padx=12)
         self.input.bind("<Control-Return>", self.send)
@@ -63,6 +74,22 @@ class ChatApp:
         self.render_session()
         root.protocol("WM_DELETE_WINDOW", self.close)
         root.after(100, self.poll_events)
+
+    def apply_template(self):
+        """包装输入内容，留给用户审阅后手动发送。"""
+        content = self.input.get("1.0", "end-1c")
+        if any(content.startswith(template.split("\n")[0]) for template in TEMPLATES.values()):
+            messagebox.showinfo("模板已应用", "请先编辑或清空现有模板，避免重复嵌套。", parent=self.root)
+            return
+        try:
+            prompt = build_prompt(self.template_name.get(), content)
+        except ValueError as error:
+            self.status.set(str(error))
+            return
+        self.input.delete("1.0", "end")
+        self.input.insert("1.0", prompt)
+        self.input.focus_set()
+        self.status.set("模板已填入，可编辑后发送")
 
     def refresh_sessions(self):
         """刷新名称列表，并保留当前选中项。"""
