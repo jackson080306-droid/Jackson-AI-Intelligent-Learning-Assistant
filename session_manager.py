@@ -1,6 +1,7 @@
 """保存多个独立会话，并兼容旧版聊天历史。"""
 
 import json
+import math
 from pathlib import Path
 from uuid import uuid4
 
@@ -52,6 +53,9 @@ class SessionManager:
         """检查文件结构、唯一 ID 和当前会话是否有效。"""
         if not isinstance(self.data, dict) or self.data.get("version") != 1:
             raise ValueError("会话文件版本或结构不正确。")
+        seconds = self.data.get("usage_seconds", 0)
+        if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds < 0:
+            raise ValueError("累计使用时长不正确。")
         sessions = self.data.get("sessions")
         if not isinstance(sessions, list) or not sessions:
             raise ValueError("至少需要一个会话。")
